@@ -1,0 +1,33 @@
+{
+	"name": "obsidian-open-in-new-tab",
+	"version": "1.0.0",
+	"description": "Obsidian plugin that causes internal links to open in a new tab by default.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"test": "esbuild test/openInNewTab.test.ts --bundle --platform=node --format=cjs | node"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"links",
+		"tabs",
+		"navigation"
+	],
+	"author": "blursedperf",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/blursedperf/obsidian-open-in-new-tab.git"
+	},
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "0.21.5",
+		"monkey-around": "^3.0.0",
+		"obsidian": "^1.5.7",
+		"tslib": "2.6.2",
+		"typescript": "5.4.5"
+	}
+}

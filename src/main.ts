@@ -1,0 +1,300 @@
+import {
+	App,
+	FileView,
+	Keymap,
+	Notice,
+	OpenViewState,
+	PaneType,
+	Platform,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	WorkspaceLeaf,
+	WorkspaceWindow,
+} from "obsidian";
+import { around } from "monkey-around";
+import {
+	DEFAULT_SETTINGS,
+	DefaultOpenTarget,
+	OpenInNewTabSettings,
+	resolveOpenLinkBehavior,
+	splitLinktext,
+} from "./resolver";
+
+/** Window of time (ms) to correlate a Mod+Click with its delayed openLinkText call. */
+const MOD_INTERACTION_WINDOW_MS = 500;
+
+export default class OpenInNewTabPlugin extends Plugin {
+	settings: OpenInNewTabSettings = { ...DEFAULT_SETTINGS };
+	private lastPlainModInteractionTimestamp = 0;
+
+	async onload(): Promise<void> {
+		await this.loadSettings();
+
+		this.registerInteractionTrackers();
+		this.patchWorkspaceOpenLinkText();
+
+		this.addCommand({
+			id: "toggle",
+			name: "Toggle default link opening behavior",
+			callback: async () => {
+				this.settings.enabled = !this.settings.enabled;
+				await this.saveSettings();
+				new Notice(
+					`Open links in new tab: ${this.settings.enabled ? "enabled" : "disabled"}`
+				);
+			},
+		});
+
+		this.addSettingTab(new OpenInNewTabSettingTab(this.app, this));
+	}
+
+	async loadSettings(): Promise<void> {
+		const loaded = (await this.loadData()) as Partial<OpenInNewTabSettings> | null;
+		this.settings = { ...DEFAULT_SETTINGS, ...loaded };
+	}
+
+	async saveSettings(): Promise<void> {
+		await this.saveData(this.settings);
+	}
+
+	/**
+	 * Tracks whether the user's most recent pointer or keyboard interaction held `Mod` (Cmd/Ctrl)
+	 * without `Alt` or `Shift`. Cleared immediately on any unmodified interaction.
+	 */
+	private registerInteractionTrackers(): void {
+		const recordEvent = (evt: MouseEvent | KeyboardEvent): void => {
+			const isMod = Keymap.isModifier(evt, "Mod");
+			const isAlt = Keymap.isModifier(evt, "Alt");
+			const isShift = Keymap.isModifier(evt, "Shift");
+
+			if (isMod && !isAlt && !isShift) {
+				this.lastPlainModInteractionTimestamp = Date.now();
+			} else {
+				this.lastPlainModInteractionTimestamp = 0;
+			}
+		};
+
+		const registeredWindows = new WeakSet<Window>();
+		const registerWindowEvents = (win: Window): void => {
+			if (!win || registeredWindows.has(win)) {
+				return;
+			}
+			registeredWindows.add(win);
+			this.registerDomEvent(win, "click", recordEvent, { capture: true });
+			this.registerDomEvent(win, "auxclick", recordEvent, { capture: true });
+			this.registerDomEvent(win, "keydown", recordEvent, { capture: true });
+		};
+
+		// Track main window
+		registerWindowEvents(window);
+
+		// Track any existing popout windows
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			const root = leaf.getRoot();
+			if (typeof WorkspaceWindow !== "undefined" && root instanceof WorkspaceWindow && root.win) {
+				registerWindowEvents(root.win);
+			}
+		});
+
+		// Track any newly opened popout windows
+		this.registerEvent(
+			this.app.workspace.on("window-open", (_win, popoutWindow) => {
+				registerWindowEvents(popoutWindow);
+			})
+		);
+	}
+
+	private consumePlainModInteraction(): boolean {
+		if (this.lastPlainModInteractionTimestamp === 0) {
+			return false;
+		}
+		const elapsed = Date.now() - this.lastPlainModInteractionTimestamp;
+		this.lastPlainModInteractionTimestamp = 0;
+		return elapsed >= 0 && elapsed <= MOD_INTERACTION_WINDOW_MS;
+	}
+
+	private patchWorkspaceOpenLinkText(): void {
+		const plugin = this;
+
+		this.register(
+			around(this.app.workspace, {
+				openLinkText(oldOpenLinkText) {
+					return async function (
+						linktext: string,
+						sourcePath: string,
+						newLeaf?: PaneType | boolean,
+						openViewState?: OpenViewState
+					): Promise<void> {
+						const isPlainModInteraction = plugin.consumePlainModInteraction();
+						const activeFile = plugin.app.workspace.getActiveFile();
+						const { path, subpath } = splitLinktext(linktext);
+						const resolvedFile = path
+							? plugin.app.metadataCache.getFirstLinkpathDest(path, sourcePath)
+							: activeFile;
+
+						const decision = resolveOpenLinkBehavior({
+							linktext,
+							sourcePath,
+							requestedNewLeaf: newLeaf,
+							settings: plugin.settings,
+							activeFilePath: activeFile?.path ?? null,
+							resolvedTargetFilePath: resolvedFile?.path ?? null,
+							isPlainModInteraction,
+						});
+
+						if (decision.action === "passthrough") {
+							return oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, openViewState);
+						}
+
+						if (decision.action === "reuse-or-open" && resolvedFile) {
+							const existingLeaf = plugin.findExistingFileLeaf(decision.targetFilePath);
+							if (existingLeaf) {
+								plugin.app.workspace.setActiveLeaf(existingLeaf, { focus: decision.focus });
+								const eState = subpath
+									? { ...(openViewState?.eState as Record<string, unknown> | undefined), subpath }
+									: openViewState?.eState;
+								await existingLeaf.openFile(resolvedFile, {
+									...openViewState,
+									active: decision.focus,
+									eState,
+								});
+								return;
+							}
+						}
+
+						const nextOpenViewState: OpenViewState | undefined =
+							decision.focus && (decision.newLeaf === "tab" || decision.newLeaf === true)
+								? { ...openViewState, active: openViewState?.active ?? true }
+								: openViewState;
+
+						return oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, nextOpenViewState);
+					};
+				},
+			})
+		);
+	}
+
+	private findExistingFileLeaf(filePath: string): WorkspaceLeaf | null {
+		let fallback: WorkspaceLeaf | null = null;
+		let mainLeaf: WorkspaceLeaf | null = null;
+
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			if (mainLeaf) {
+				return;
+			}
+			const view = leaf.view;
+			if (view instanceof FileView && view.file?.path === filePath) {
+				const root = leaf.getRoot();
+				const isMainOrWindow =
+					root === this.app.workspace.rootSplit ||
+					(typeof WorkspaceWindow !== "undefined" && root instanceof WorkspaceWindow);
+
+				if (isMainOrWindow) {
+					mainLeaf = leaf;
+				} else if (!fallback) {
+					fallback = leaf;
+				}
+			}
+		});
+
+		return mainLeaf ?? fallback;
+	}
+}
+
+class OpenInNewTabSettingTab extends PluginSettingTab {
+	plugin: OpenInNewTabPlugin;
+
+	constructor(app: App, plugin: OpenInNewTabPlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+
+		new Setting(containerEl).setName("Link opening behavior").setHeading();
+
+		new Setting(containerEl)
+			.setName("Open links in new tab by default")
+			.setDesc(
+				"When enabled, clicking internal links in notes, properties, backlinks, graph, or canvas opens them in a new tab instead of replacing the current tab."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.enabled).onChange(async (value) => {
+					this.plugin.settings.enabled = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Default target for opened links")
+			.setDesc("Choose where links open by default when clicked.")
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption("tab", "New tab")
+					.addOption("split", "Split right");
+
+				if (Platform.isDesktop) {
+					dropdown.addOption("window", "New window");
+				}
+
+				dropdown
+					.setValue(this.plugin.settings.defaultTarget)
+					.onChange(async (value) => {
+						this.plugin.settings.defaultTarget = value as DefaultOpenTarget;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Focus newly opened tab")
+			.setDesc("Immediately switch to the new tab when a link is opened.")
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.focusNewTab).onChange(async (value) => {
+					this.plugin.settings.focusNewTab = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Keep same-note heading and block links in current tab")
+			.setDesc(
+				"Links to headings or blocks inside the currently active note (e.g. [[#Section]]) will scroll the current tab instead of opening a duplicate tab."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.keepSameFileLinksInCurrentTab)
+					.onChange(async (value) => {
+						this.plugin.settings.keepSameFileLinksInCurrentTab = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Reuse existing tab if note is already open")
+			.setDesc(
+				"If the linked note is already open in another tab, switch to that tab instead of opening a duplicate tab."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.reuseExistingTab).onChange(async (value) => {
+					this.plugin.settings.reuseExistingTab = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		const modKeyName = Platform.isMacOS ? "Cmd" : "Ctrl";
+		new Setting(containerEl)
+			.setName(`${modKeyName}+click opens in current tab`)
+			.setDesc(
+				`Invert the modifier key behavior so holding ${modKeyName} while clicking a link opens it in the current tab.`
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.invertModClick).onChange(async (value) => {
+					this.plugin.settings.invertModClick = value;
+					await this.plugin.saveSettings();
+				})
+			);
+	}
+}
