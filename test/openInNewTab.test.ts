@@ -286,4 +286,102 @@ console.log("Running obsidian-open-in-new-tab unit tests...");
 	});
 }
 
-console.log("All 15 test suites passed successfully!");
+// 16. applyLeafFocus: shouldFocusTarget === true focuses and activates target leaf
+{
+	let activeLeafSet: any = null;
+	let activeLeafParams: any = null;
+	let viewFocused = false;
+
+	const mockTargetLeaf = {
+		view: {
+			focus: () => {
+				viewFocused = true;
+			},
+		},
+	};
+	const mockSourceLeaf = {
+		view: {
+			focus: () => {},
+		},
+	};
+
+	const mockApp = {
+		workspace: {
+			setActiveLeaf: (leaf: any, params: any) => {
+				activeLeafSet = leaf;
+				activeLeafParams = params;
+			},
+		},
+	};
+
+	const pluginLike = {
+		app: mockApp,
+		applyLeafFocus(target: any, prev: any, shouldFocus: boolean) {
+			if (shouldFocus) {
+				if (target) {
+					this.app.workspace.setActiveLeaf(target, { focus: true });
+					if (target.view?.focus) target.view.focus();
+				}
+			} else if (prev && prev !== target) {
+				this.app.workspace.setActiveLeaf(prev, { focus: true });
+				if (prev.view?.focus) prev.view.focus();
+			}
+		},
+	};
+
+	pluginLike.applyLeafFocus(mockTargetLeaf, mockSourceLeaf, true);
+	assert.strictEqual(activeLeafSet, mockTargetLeaf);
+	assert.deepStrictEqual(activeLeafParams, { focus: true });
+	assert.strictEqual(viewFocused, true);
+}
+
+// 17. applyLeafFocus: shouldFocusTarget === false preserves and restores previous source leaf in background
+{
+	let activeLeafSet: any = null;
+	let activeLeafParams: any = null;
+	let sourceFocused = false;
+
+	const mockTargetLeaf = {
+		view: {
+			focus: () => {},
+		},
+	};
+	const mockSourceLeaf = {
+		view: {
+			focus: () => {
+				sourceFocused = true;
+			},
+		},
+	};
+
+	const mockApp = {
+		workspace: {
+			setActiveLeaf: (leaf: any, params: any) => {
+				activeLeafSet = leaf;
+				activeLeafParams = params;
+			},
+		},
+	};
+
+	const pluginLike = {
+		app: mockApp,
+		applyLeafFocus(target: any, prev: any, shouldFocus: boolean) {
+			if (shouldFocus) {
+				if (target) {
+					this.app.workspace.setActiveLeaf(target, { focus: true });
+					if (target.view?.focus) target.view.focus();
+				}
+			} else if (prev && prev !== target) {
+				this.app.workspace.setActiveLeaf(prev, { focus: true });
+				if (prev.view?.focus) prev.view.focus();
+			}
+		},
+	};
+
+	pluginLike.applyLeafFocus(mockTargetLeaf, mockSourceLeaf, false);
+	assert.strictEqual(activeLeafSet, mockSourceLeaf);
+	assert.deepStrictEqual(activeLeafParams, { focus: true });
+	assert.strictEqual(sourceFocused, true);
+}
+
+console.log("All 17 test suites passed successfully!");

@@ -144,13 +144,28 @@ export default class OpenInNewTabPlugin extends Plugin {
 						});
 
 						if (decision.action === "passthrough") {
+							if (
+								plugin.settings.enabled &&
+								(decision.newLeaf === "tab" || decision.newLeaf === true) &&
+								openViewState?.active === undefined
+							) {
+								const currentActiveLeaf = plugin.app.workspace.activeLeaf;
+								const nextOpenViewState: OpenViewState = {
+									...openViewState,
+									active: plugin.settings.focusNewTab,
+								};
+								await oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, nextOpenViewState);
+								const newActiveLeaf = plugin.app.workspace.activeLeaf;
+								plugin.applyLeafFocus(newActiveLeaf, currentActiveLeaf, plugin.settings.focusNewTab);
+								return;
+							}
 							return oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, openViewState);
 						}
 
 						if (decision.action === "reuse-or-open" && resolvedFile) {
 							const existingLeaf = plugin.findExistingFileLeaf(decision.targetFilePath);
 							if (existingLeaf) {
-								plugin.app.workspace.setActiveLeaf(existingLeaf, { focus: decision.focus });
+								const currentActiveLeaf = plugin.app.workspace.activeLeaf;
 								const eState = subpath
 									? { ...(openViewState?.eState as Record<string, unknown> | undefined), subpath }
 									: openViewState?.eState;
@@ -159,20 +174,62 @@ export default class OpenInNewTabPlugin extends Plugin {
 									active: decision.focus,
 									eState,
 								});
+								plugin.applyLeafFocus(existingLeaf, currentActiveLeaf, decision.focus);
 								return;
 							}
 						}
 
-						const nextOpenViewState: OpenViewState | undefined =
-							decision.focus && (decision.newLeaf === "tab" || decision.newLeaf === true)
-								? { ...openViewState, active: openViewState?.active ?? true }
-								: openViewState;
+						// action === "open" (or fallback from reuse-or-open)
+						const currentActiveLeaf = plugin.app.workspace.activeLeaf;
+						const nextOpenViewState: OpenViewState = {
+							...openViewState,
+							active: decision.focus,
+						};
 
-						return oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, nextOpenViewState);
+						await oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, nextOpenViewState);
+						const newActiveLeaf = plugin.app.workspace.activeLeaf;
+						plugin.applyLeafFocus(newActiveLeaf, currentActiveLeaf, decision.focus);
 					};
 				},
 			})
 		);
+	}
+
+	/**
+	 * Explicitly enforces whether the target leaf or the original source leaf receives active
+	 * tab status and editor focus, preventing browser click events or internal default heuristics
+	 * from subverting the user's focusNewTab preference.
+	 */
+	applyLeafFocus(
+		targetLeaf: WorkspaceLeaf | null,
+		previousActiveLeaf: WorkspaceLeaf | null,
+		shouldFocusTarget: boolean
+	): void {
+		if (shouldFocusTarget) {
+			if (targetLeaf) {
+				this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
+				// Ensure focus switches to the new tab even if the click event on the source editor attempts to reclaim focus
+				setTimeout(() => {
+					if (targetLeaf && targetLeaf.view) {
+						this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
+						if (typeof (targetLeaf.view as any)?.focus === "function") {
+							(targetLeaf.view as any).focus();
+						}
+					}
+				}, 10);
+			}
+		} else if (previousActiveLeaf && previousActiveLeaf !== targetLeaf) {
+			// Tab should open in background: preserve/restore previous active leaf
+			this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
+			setTimeout(() => {
+				if (previousActiveLeaf && previousActiveLeaf.view) {
+					this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
+					if (typeof (previousActiveLeaf.view as any)?.focus === "function") {
+						(previousActiveLeaf.view as any).focus();
+					}
+				}
+			}, 10);
+		}
 	}
 
 	private findExistingFileLeaf(filePath: string): WorkspaceLeaf | null {
