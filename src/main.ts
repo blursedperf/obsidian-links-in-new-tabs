@@ -9,6 +9,8 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	SettingDefinitionItem,
+	View,
 	WorkspaceLeaf,
 	WorkspaceWindow,
 } from "obsidian";
@@ -23,6 +25,12 @@ import {
 
 /** Window of time (ms) to correlate a Mod+Click with its delayed openLinkText call. */
 const MOD_INTERACTION_WINDOW_MS = 500;
+
+type FocusableView = View & { focus: () => void };
+
+function isFocusableView(view: View): view is FocusableView {
+	return typeof (view as Partial<FocusableView>).focus === "function";
+}
 
 export default class LinksInNewTabsPlugin extends Plugin {
 	settings: LinksInNewTabsSettings = { ...DEFAULT_SETTINGS };
@@ -115,6 +123,7 @@ export default class LinksInNewTabsPlugin extends Plugin {
 	}
 
 	private patchWorkspaceOpenLinkText(): void {
+		// eslint-disable-next-line @typescript-eslint/no-this-alias -- the patched function needs both the plugin and Obsidian's own `this`
 		const plugin = this;
 
 		this.register(
@@ -149,25 +158,26 @@ export default class LinksInNewTabsPlugin extends Plugin {
 								(decision.newLeaf === "tab" || decision.newLeaf === true) &&
 								openViewState?.active === undefined
 							) {
-								const currentActiveLeaf = plugin.app.workspace.activeLeaf;
+								const currentActiveLeaf = plugin.getActiveLeaf();
 								const nextOpenViewState: OpenViewState = {
 									...openViewState,
 									active: plugin.settings.focusNewTab,
 								};
 								await oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, nextOpenViewState);
-								const newActiveLeaf = plugin.app.workspace.activeLeaf;
+								const newActiveLeaf = plugin.getActiveLeaf();
 								plugin.applyLeafFocus(newActiveLeaf, currentActiveLeaf, plugin.settings.focusNewTab);
 								return;
 							}
-							return oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, openViewState);
+							await oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, openViewState);
+							return;
 						}
 
 						if (decision.action === "reuse-or-open" && resolvedFile) {
 							const existingLeaf = plugin.findExistingFileLeaf(decision.targetFilePath);
 							if (existingLeaf) {
-								const currentActiveLeaf = plugin.app.workspace.activeLeaf;
+								const currentActiveLeaf = plugin.getActiveLeaf();
 								const eState = subpath
-									? { ...(openViewState?.eState as Record<string, unknown> | undefined), subpath }
+									? { ...openViewState?.eState, subpath }
 									: openViewState?.eState;
 								await existingLeaf.openFile(resolvedFile, {
 									...openViewState,
@@ -180,14 +190,14 @@ export default class LinksInNewTabsPlugin extends Plugin {
 						}
 
 						// action === "open" (or fallback from reuse-or-open)
-						const currentActiveLeaf = plugin.app.workspace.activeLeaf;
+						const currentActiveLeaf = plugin.getActiveLeaf();
 						const nextOpenViewState: OpenViewState = {
 							...openViewState,
 							active: decision.focus,
 						};
 
 						await oldOpenLinkText.call(this, linktext, sourcePath, decision.newLeaf, nextOpenViewState);
-						const newActiveLeaf = plugin.app.workspace.activeLeaf;
+						const newActiveLeaf = plugin.getActiveLeaf();
 						plugin.applyLeafFocus(newActiveLeaf, currentActiveLeaf, decision.focus);
 					};
 				},
@@ -200,6 +210,11 @@ export default class LinksInNewTabsPlugin extends Plugin {
 	 * tab status and editor focus, preventing browser click events or internal default heuristics
 	 * from subverting the user's focusNewTab preference.
 	 */
+	/** The currently active leaf, without using the deprecated `workspace.activeLeaf`. */
+	getActiveLeaf(): WorkspaceLeaf | null {
+		return this.app.workspace.getActiveViewOfType(View)?.leaf ?? null;
+	}
+
 	applyLeafFocus(
 		targetLeaf: WorkspaceLeaf | null,
 		previousActiveLeaf: WorkspaceLeaf | null,
@@ -209,11 +224,11 @@ export default class LinksInNewTabsPlugin extends Plugin {
 			if (targetLeaf) {
 				this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
 				// Ensure focus switches to the new tab even if the click event on the source editor attempts to reclaim focus
-				setTimeout(() => {
+				window.setTimeout(() => {
 					if (targetLeaf && targetLeaf.view) {
 						this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
-						if (typeof (targetLeaf.view as any)?.focus === "function") {
-							(targetLeaf.view as any).focus();
+						if (isFocusableView(targetLeaf.view)) {
+							targetLeaf.view.focus();
 						}
 					}
 				}, 10);
@@ -221,11 +236,11 @@ export default class LinksInNewTabsPlugin extends Plugin {
 		} else if (previousActiveLeaf && previousActiveLeaf !== targetLeaf) {
 			// Tab should open in background: preserve/restore previous active leaf
 			this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
-			setTimeout(() => {
+			window.setTimeout(() => {
 				if (previousActiveLeaf && previousActiveLeaf.view) {
 					this.app.workspace.setActiveLeaf(previousActiveLeaf, { focus: true });
-					if (typeof (previousActiveLeaf.view as any)?.focus === "function") {
-						(previousActiveLeaf.view as any).focus();
+					if (isFocusableView(previousActiveLeaf.view)) {
+						previousActiveLeaf.view.focus();
 					}
 				}
 			}, 10);
@@ -267,6 +282,81 @@ class LinksInNewTabsSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	/** Declarative settings (Obsidian 1.13+), which also makes them show up in settings search. */
+	getSettingDefinitions(): SettingDefinitionItem<keyof LinksInNewTabsSettings>[] {
+		const modKeyName = Platform.isMacOS ? "Cmd" : "Ctrl";
+		const targetOptions: Record<string, string> = { tab: "New tab", split: "Split right" };
+		if (Platform.isDesktop) {
+			targetOptions.window = "New window";
+		}
+
+		return [
+			{
+				type: "group",
+				heading: "Link opening behavior",
+				items: [
+					{
+						name: "Open links in new tab by default",
+						desc: "When enabled, clicking internal links in notes, properties, backlinks, graph, or canvas opens them in a new tab instead of replacing the current tab.",
+						control: { type: "toggle", key: "enabled", defaultValue: DEFAULT_SETTINGS.enabled },
+					},
+					{
+						name: "Default target for opened links",
+						desc: "Choose where links open by default when clicked.",
+						control: {
+							type: "dropdown",
+							key: "defaultTarget",
+							options: targetOptions,
+							defaultValue: DEFAULT_SETTINGS.defaultTarget,
+						},
+					},
+					{
+						name: "Focus newly opened tab",
+						desc: "Immediately switch to the new tab when a link is opened.",
+						control: { type: "toggle", key: "focusNewTab", defaultValue: DEFAULT_SETTINGS.focusNewTab },
+					},
+					{
+						name: "Keep same-note heading and block links in current tab",
+						desc: "Links to headings or blocks inside the currently active note (e.g. [[#Section]]) will scroll the current tab instead of opening a duplicate tab.",
+						control: {
+							type: "toggle",
+							key: "keepSameFileLinksInCurrentTab",
+							defaultValue: DEFAULT_SETTINGS.keepSameFileLinksInCurrentTab,
+						},
+					},
+					{
+						name: "Reuse existing tab if note is already open",
+						desc: "If the linked note is already open in another tab, switch to that tab instead of opening a duplicate tab.",
+						control: {
+							type: "toggle",
+							key: "reuseExistingTab",
+							defaultValue: DEFAULT_SETTINGS.reuseExistingTab,
+						},
+					},
+					{
+						name: `${modKeyName}+click opens in current tab`,
+						desc: `Invert the modifier key behavior so holding ${modKeyName} while clicking a link opens it in the current tab.`,
+						control: {
+							type: "toggle",
+							key: "invertModClick",
+							defaultValue: DEFAULT_SETTINGS.invertModClick,
+						},
+					},
+				],
+			},
+		];
+	}
+
+	getControlValue(key: string): unknown {
+		return this.plugin.settings[key as keyof LinksInNewTabsSettings];
+	}
+
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		this.plugin.settings = { ...this.plugin.settings, [key]: value };
+		await this.plugin.saveSettings();
+	}
+
+	/** Imperative fallback for Obsidian versions older than 1.13.0. */
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
