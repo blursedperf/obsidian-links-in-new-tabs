@@ -1,17 +1,17 @@
 import assert from "node:assert";
 import {
 	DEFAULT_SETTINGS,
-	OpenInNewTabSettings,
+	LinksInNewTabsSettings,
 	isExternalUri,
 	resolveOpenLinkBehavior,
 	splitLinktext,
 } from "../src/resolver";
 
-function makeSettings(overrides: Partial<OpenInNewTabSettings> = {}): OpenInNewTabSettings {
+function makeSettings(overrides: Partial<LinksInNewTabsSettings> = {}): LinksInNewTabsSettings {
 	return { ...DEFAULT_SETTINGS, ...overrides };
 }
 
-console.log("Running obsidian-open-in-new-tab unit tests...");
+console.log("Running obsidian-links-in-new-tabs unit tests...");
 
 // 1. splitLinktext tests
 {

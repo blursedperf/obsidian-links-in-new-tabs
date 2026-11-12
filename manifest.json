@@ -1,6 +1,6 @@
 {
-	"id": "open-in-new-tab",
-	"name": "Open Links in New Tab",
+	"id": "links-in-new-tabs",
+	"name": "Links in New Tabs",
 	"version": "1.0.0",
 	"minAppVersion": "1.5.0",
 	"description": "Opens internal links in a new tab by default, with options for same-note heading links, tab reuse, and Cmd/Ctrl+Click inversion.",

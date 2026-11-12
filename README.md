@@ -1,4 +1,4 @@
-# Open Links in New Tab
+# Links in New Tabs
 
 An Obsidian plugin that causes internal links (`[[WikiLinks]]`, Markdown links, Properties links, Backlinks, Outgoing Links, Graph nodes, Canvas links, and `Follow link under cursor`) to open in a new tab by default instead of replacing the current tab.
 
@@ -33,7 +33,7 @@ In accordance with Obsidian Developer Policies:
 
 ## Commands
 
-- `Open Links in New Tab: Toggle default link opening behavior` — Quick hotkey toggle to enable or disable the plugin.
+- `Links in New Tabs: Toggle default link opening behavior` — Quick hotkey toggle to enable or disable the plugin.
 
 ## Installation
 
@@ -41,15 +41,15 @@ In accordance with Obsidian Developer Policies:
 
 1. Open Obsidian **Settings → Community plugins**.
 2. Turn off **Restricted mode**.
-3. Click **Browse** and search for `Open Links in New Tab`.
+3. Click **Browse** and search for `Links in New Tabs`.
 4. Click **Install**, then click **Enable**.
 
 ### Manual Installation
 
-1. Download `main.js` and `manifest.json` from the latest [GitHub Release](https://github.com/blursedperf/obsidian-open-in-new-tab/releases).
-2. Create a folder named `open-in-new-tab` inside your vault's `.obsidian/plugins/` directory.
-3. Move `main.js` and `manifest.json` into `.obsidian/plugins/open-in-new-tab/`.
-4. Reload Obsidian and enable **Open Links in New Tab** in **Settings → Community plugins**.
+1. Download `main.js` and `manifest.json` from the latest [GitHub Release](https://github.com/blursedperf/obsidian-links-in-new-tabs/releases).
+2. Create a folder named `links-in-new-tabs` inside your vault's `.obsidian/plugins/` directory.
+3. Move `main.js` and `manifest.json` into `.obsidian/plugins/links-in-new-tabs/`.
+4. Reload Obsidian and enable **Links in New Tabs** in **Settings → Community plugins**.
 
 ## Development
 

@@ -1,5 +1,5 @@
 {
-	"name": "obsidian-open-in-new-tab",
+	"name": "obsidian-links-in-new-tabs",
 	"version": "1.0.0",
 	"description": "Obsidian plugin that causes internal links to open in a new tab by default.",
 	"main": "main.js",
@@ -19,7 +19,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/blursedperf/obsidian-open-in-new-tab.git"
+		"url": "https://github.com/blursedperf/obsidian-links-in-new-tabs.git"
 	},
 	"devDependencies": {
 		"@types/node": "^20.11.0",

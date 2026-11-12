@@ -2,7 +2,7 @@ import type { PaneType } from "obsidian";
 
 export type DefaultOpenTarget = "tab" | "split" | "window";
 
-export interface OpenInNewTabSettings {
+export interface LinksInNewTabsSettings {
 	/** Master toggle: open internal links in a new tab (or target) by default. */
 	enabled: boolean;
 	/** Default target pane type when opening a link ("tab", "split", or "window"). */
@@ -17,7 +17,7 @@ export interface OpenInNewTabSettings {
 	focusNewTab: boolean;
 }
 
-export const DEFAULT_SETTINGS: OpenInNewTabSettings = {
+export const DEFAULT_SETTINGS: LinksInNewTabsSettings = {
 	enabled: true,
 	defaultTarget: "tab",
 	keepSameFileLinksInCurrentTab: true,
@@ -30,7 +30,7 @@ export interface LinkOpenContext {
 	linktext: string;
 	sourcePath: string;
 	requestedNewLeaf: PaneType | boolean | undefined;
-	settings: OpenInNewTabSettings;
+	settings: LinksInNewTabsSettings;
 	activeFilePath: string | null;
 	resolvedTargetFilePath: string | null;
 	isPlainModInteraction: boolean;

@@ -16,7 +16,7 @@ import { around } from "monkey-around";
 import {
 	DEFAULT_SETTINGS,
 	DefaultOpenTarget,
-	OpenInNewTabSettings,
+	LinksInNewTabsSettings,
 	resolveOpenLinkBehavior,
 	splitLinktext,
 } from "./resolver";
@@ -24,8 +24,8 @@ import {
 /** Window of time (ms) to correlate a Mod+Click with its delayed openLinkText call. */
 const MOD_INTERACTION_WINDOW_MS = 500;
 
-export default class OpenInNewTabPlugin extends Plugin {
-	settings: OpenInNewTabSettings = { ...DEFAULT_SETTINGS };
+export default class LinksInNewTabsPlugin extends Plugin {
+	settings: LinksInNewTabsSettings = { ...DEFAULT_SETTINGS };
 	private lastPlainModInteractionTimestamp = 0;
 
 	async onload(): Promise<void> {
@@ -46,11 +46,11 @@ export default class OpenInNewTabPlugin extends Plugin {
 			},
 		});
 
-		this.addSettingTab(new OpenInNewTabSettingTab(this.app, this));
+		this.addSettingTab(new LinksInNewTabsSettingTab(this.app, this));
 	}
 
 	async loadSettings(): Promise<void> {
-		const loaded = (await this.loadData()) as Partial<OpenInNewTabSettings> | null;
+		const loaded = (await this.loadData()) as Partial<LinksInNewTabsSettings> | null;
 		this.settings = { ...DEFAULT_SETTINGS, ...loaded };
 	}
 
@@ -259,10 +259,10 @@ export default class OpenInNewTabPlugin extends Plugin {
 	}
 }
 
-class OpenInNewTabSettingTab extends PluginSettingTab {
-	plugin: OpenInNewTabPlugin;
+class LinksInNewTabsSettingTab extends PluginSettingTab {
+	plugin: LinksInNewTabsPlugin;
 
-	constructor(app: App, plugin: OpenInNewTabPlugin) {
+	constructor(app: App, plugin: LinksInNewTabsPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
