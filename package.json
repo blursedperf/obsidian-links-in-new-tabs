@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-links-in-new-tabs",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Obsidian plugin that causes internal links to open in a new tab by default.",
 	"main": "main.js",
 	"scripts": {
