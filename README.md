@@ -16,6 +16,7 @@ An Obsidian plugin that causes internal links (`[[WikiLinks]]`, Markdown links, 
 In accordance with Obsidian Developer Policies:
 
 - **Zero network requests**: This plugin makes no network calls, communicates with no remote servers or APIs, and contains no external tracking or telemetry scripts.
+- **Offline audit**: Every test run checks the source, built bundle and styles with `scripts/offline-audit.mjs`, which fails on any network API (`fetch`, `XMLHttpRequest`, WebSocket, `requestUrl`, workers, dynamic `import()`, ...), dynamic code (`eval`, `new Function`), raw HTML injection, or remote CSS (`@import`, non-`data:` `url()`).
 - **100% offline & local**: All link resolution runs entirely in-memory within your local Obsidian vault.
 - **No external file access**: This plugin never reads, creates, or modifies files outside of your local Obsidian vault directory.
 - **No account or payment required**: Free and open-source under the MIT license.
