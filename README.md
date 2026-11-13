@@ -2,6 +2,24 @@
 
 An Obsidian plugin that causes internal links (`[[WikiLinks]]`, Markdown links, Properties links, Backlinks, Outgoing Links, Graph nodes, Canvas links, and `Follow link under cursor`) to open in a new tab by default instead of replacing the current tab.
 
+## Why this suite exists
+
+I created this suite of Obsidian plugins and the DoomEsque theme so that I can be 100 percent certain there are no network calls or traffic: everything runs 100 percent offline, so I can use Obsidian for my notes in open-book law exams.
+
+- Nothing in the suite makes a network request. Every test run checks the source, built bundle and styles with `scripts/offline-audit.mjs`, which fails on any network API (`fetch`, `XMLHttpRequest`, WebSocket, `requestUrl`, ...).
+- Obsidian itself has separate online features. For a fully offline setup, also turn off automatic updates, Sync and Publish, and don't browse community plugins during the exam.
+
+The suite:
+
+- [DoomEsque](https://github.com/blursedperf/obsidian-theme-doomesque) (theme)
+- [DoomEsque Settings](https://github.com/blursedperf/obsidian-doomesque-settings)
+- [Filetypes](https://github.com/blursedperf/obsidian-filetypes-plugin)
+- [Inline Autocomplete](https://github.com/blursedperf/obsidian-inline-autocomplete)
+- [Inline Schema Expander](https://github.com/blursedperf/obsidian-inline-schema-expander)
+- **Links in New Tabs**
+- [Pomodoro Flashcards](https://github.com/blursedperf/obsidian-pomodoro-flashcards)
+- [Whole-Tree Search](https://github.com/blursedperf/obsidian-whole-tree-search)
+
 ## Features
 
 - **Open links in a new tab by default**: Clicking any internal link opens it in a new tab (or optionally a right split or popout window).
